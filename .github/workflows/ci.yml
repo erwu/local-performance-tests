@@ -1,0 +1,70 @@
+
+name: Local Performance Tests CI
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    name: GraphQL Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Start local GraphQL server
+        run: |
+          node server.js > server.log 2>&1 &
+
+          for i in {1..30}; do
+            if curl -fsS \
+              -X POST http://127.0.0.1:4000/graphql \
+              -H "Content-Type: application/json" \
+              --data '{"query":"{ properties(rateParams: { adultsNumber: 2 }) { ratesCount } }"}' \
+              > /dev/null; then
+              echo "GraphQL server is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat server.log
+          exit 1
+        working-directory: server
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Prepare results directory
+        run: mkdir -p results
+
+      - name: Run k6 smoke test
+        run: k6 run tests/smoke-test.js
+
+      - name: Upload test summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-smoke-test-results
+          path: results/smoke-test-summary.json
+          if-no-files-found: ignore
