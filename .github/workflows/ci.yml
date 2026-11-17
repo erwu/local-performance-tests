@@ -61,10 +61,11 @@ jobs:
       - name: Run k6 smoke test
         run: k6 run tests/smoke-test.js
 
-      - name: Upload test summary
+      - name: Upload k6 test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: k6-smoke-test-results
-          path: results/smoke-test-summary.json
-          if-no-files-found: ignore
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
